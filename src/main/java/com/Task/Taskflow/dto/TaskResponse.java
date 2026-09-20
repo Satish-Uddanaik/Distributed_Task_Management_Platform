@@ -6,13 +6,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
 @Builder
 @AllArgsConstructor
-public class TaskResponse {
+public class TaskResponse implements Serializable {
 
     private Long id;
     private String title;

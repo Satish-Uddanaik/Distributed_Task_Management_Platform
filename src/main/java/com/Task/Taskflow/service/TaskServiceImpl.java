@@ -82,6 +82,9 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public List<TaskResponse> getTasksByUser(Long userId) {
 
+
+        System.out.println("🔥 DATABASE METHOD EXECUTED");
+
         User currentUser = currentUserService.getCurrentUser();
 
         if (!currentUser.getId().equals(userId)) {

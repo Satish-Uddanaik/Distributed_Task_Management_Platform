@@ -39,15 +39,20 @@ public class AuthService {
                         )
                 );
 
+        User user = userRepository
+                .findByEmail(request.getEmail())
+                .orElseThrow();
+
+        // Check email verification
+        if (!user.isEmailVerified()) {
+            throw new RuntimeException("Please verify your email first");
+        }
+
         UserDetails userDetails =
                 (UserDetails) authentication.getPrincipal();
 
         String token =
                 jwtService.generateToken(userDetails);
-
-        User user = userRepository
-                .findByEmail(request.getEmail())
-                .orElseThrow();
 
         return AuthResponse.builder()
                 .token(token)

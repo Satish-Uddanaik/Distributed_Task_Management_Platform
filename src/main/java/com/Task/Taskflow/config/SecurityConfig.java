@@ -80,8 +80,8 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // Registration
-                        .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
-
+//                        .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")
                         // Login
                         .requestMatchers("/api/auth/**").permitAll()
 

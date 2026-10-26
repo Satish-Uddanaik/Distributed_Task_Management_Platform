@@ -56,6 +56,7 @@ public class AuthService {
 
         return AuthResponse.builder()
                 .token(token)
+                .id(user.getId())
                 .email(user.getEmail())
                 .role(user.getRole().name())
                 .build();

@@ -2,7 +2,7 @@ package com.Task.Taskflow.entity;
 
 
 public enum TaskStatus {
-    TODO,
+    PENDING,
     IN_PROGRESS,
     COMPLETED
 }

@@ -1,6 +1,5 @@
 package com.Task.Taskflow.service;
 
-
 import com.Task.Taskflow.dto.TaskRequest;
 import com.Task.Taskflow.dto.TaskResponse;
 import com.Task.Taskflow.entity.Task;
@@ -15,6 +14,9 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+import com.Task.Taskflow.dto.TaskCreatedEvent;
+import com.Task.Taskflow.kafka.KafkaProducerService;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -24,21 +26,27 @@ public class TaskServiceImpl implements TaskService {
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final KafkaProducerService kafkaProducerService;
 
     public TaskServiceImpl(
             TaskRepository taskRepository,
-            UserRepository userRepository,CurrentUserService currentUserService) {
+            UserRepository userRepository,
+            CurrentUserService currentUserService,
+            KafkaProducerService kafkaProducerService) {
 
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
+        this.kafkaProducerService = kafkaProducerService;
     }
 
-    @CacheEvict(
-            value = "userTasks",
-            key = "#userId"
-    )
+
+    // =========================================================
+    // CREATE TASK
+    // =========================================================
+
     @Override
+    @CacheEvict(value = "userTasks", allEntries = true)
     public TaskResponse createTask(
             Long userId,
             TaskRequest request) {
@@ -56,15 +64,30 @@ public class TaskServiceImpl implements TaskService {
                 .description(request.getDescription())
                 .priority(request.getPriority())
                 .dueDate(request.getDueDate())
-                .status(TaskStatus.TODO)
+                .status(TaskStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .user(currentUser)
                 .build();
 
-        return convertToResponse(
-                taskRepository.save(task)
+        Task savedTask = taskRepository.save(task);
+
+        TaskCreatedEvent event = new TaskCreatedEvent(
+                "TASK_CREATED",
+                savedTask.getId(),
+                savedTask.getTitle(),
+                savedTask.getUser().getId(),
+                savedTask.getCreatedAt()
         );
+
+        kafkaProducerService.publishTaskCreated(event);
+
+        return convertToResponse(savedTask);
     }
+
+
+    // =========================================================
+    // GET ALL TASKS
+    // =========================================================
 
     @Override
     public List<TaskResponse> getAllTasks() {
@@ -75,13 +98,17 @@ public class TaskServiceImpl implements TaskService {
                 .toList();
     }
 
+
+    // =========================================================
+    // GET USER TASKS
+    // =========================================================
+
+    @Override
     @Cacheable(
             value = "userTasks",
             key = "#userId"
     )
-    @Override
     public List<TaskResponse> getTasksByUser(Long userId) {
-
 
         System.out.println("🔥 DATABASE METHOD EXECUTED");
 
@@ -99,53 +126,117 @@ public class TaskServiceImpl implements TaskService {
                 .toList();
     }
 
-//    @Override
-//    public TaskResponse getTaskById(Long id) {
-//
-//        Task task = taskRepository.findById(id)
-//                .orElseThrow(() ->
-//                        new TaskNotFoundException(
-//                                "Task not found with id: " + id
-//                        )
-//                );
-//
-//        return convertToResponse(task);
-//    }
 
-//    @Override
-//    public TaskResponse updateTask(Long id, TaskRequest request) {
-//
-//        Task existingTask = taskRepository.findById(id)
-//                .orElseThrow(() ->
-//                        new TaskNotFoundException(
-//                                "Task not found with id: " + id
-//                        )
-//                );
-//
-//        existingTask.setTitle(request.getTitle());
-//        existingTask.setDescription(request.getDescription());
-//        existingTask.setPriority(request.getPriority());
-//        existingTask.setDueDate(request.getDueDate());
-//
-//        existingTask.setUpdatedAt(LocalDateTime.now());
-//
-//        Task updatedTask = taskRepository.save(existingTask);
-//
-//        return convertToResponse(updatedTask);
-//    }
+    // =========================================================
+    // GET TASK BY ID
+    // =========================================================
 
-//    @Override
-//    public void deleteTask(Long id) {
-//
-//        Task existingTask = taskRepository.findById(id)
-//                .orElseThrow(() ->
-//                        new TaskNotFoundException(
-//                                "Task not found with id: " + id
-//                        )
-//                );
-//
-//        taskRepository.delete(existingTask);
-//    }
+    @Override
+    public TaskResponse getTaskById(Long id) {
+
+        Task task = getTaskForCurrentUser(id);
+
+        return convertToResponse(task);
+    }
+
+
+    // =========================================================
+    // UPDATE TASK
+    // =========================================================
+
+    @Override
+    @CacheEvict(
+            value = "userTasks",
+            allEntries = true
+    )
+    public TaskResponse updateTask(
+            Long id,
+            TaskRequest request) {
+
+        Task task = getTaskForCurrentUser(id);
+
+        task.setTitle(request.getTitle());
+        task.setDescription(request.getDescription());
+        task.setPriority(request.getPriority());
+        task.setDueDate(request.getDueDate());
+
+        task.setUpdatedAt(LocalDateTime.now());
+
+        Task updatedTask = taskRepository.save(task);
+
+        return convertToResponse(updatedTask);
+    }
+
+
+    // =========================================================
+    // DELETE TASK
+    // =========================================================
+
+    @Override
+    @CacheEvict(
+            value = "userTasks",
+            allEntries = true
+    )
+    public void deleteTask(Long id) {
+
+        Task task = getTaskForCurrentUser(id);
+
+        taskRepository.delete(task);
+    }
+
+
+    // =========================================================
+    // UPDATE STATUS
+    // =========================================================
+
+    @Override
+    @CacheEvict(
+            value = "userTasks",
+            allEntries = true
+    )
+    public TaskResponse updateTaskStatus(
+            Long id,
+            TaskStatus status) {
+
+        Task task = getTaskForCurrentUser(id);
+
+        task.setStatus(status);
+        task.setUpdatedAt(LocalDateTime.now());
+
+        Task updatedTask = taskRepository.save(task);
+
+        return convertToResponse(updatedTask);
+    }
+
+
+    // =========================================================
+    // GET TASK + VERIFY CURRENT USER
+    // =========================================================
+
+    private Task getTaskForCurrentUser(Long taskId) {
+
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() ->
+                        new TaskNotFoundException(
+                                "Task not found with id: " + taskId
+                        )
+                );
+
+        User currentUser = currentUserService.getCurrentUser();
+
+        if (!task.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException(
+                    "You cannot access another user's task"
+            );
+        }
+
+        return task;
+    }
+
+
+    // =========================================================
+    // ENTITY → RESPONSE DTO
+    // =========================================================
 
     private TaskResponse convertToResponse(Task task) {
 
@@ -160,88 +251,5 @@ public class TaskServiceImpl implements TaskService {
                 .updatedAt(task.getUpdatedAt())
                 .userId(task.getUser().getId())
                 .build();
-    }
-
-//    @Override
-//    public TaskResponse updateTaskStatus(Long id, TaskStatus status) {
-//
-//        Task task = taskRepository.findById(id)
-//                .orElseThrow(() ->
-//                        new TaskNotFoundException(
-//                                "Task not found with id: " + id
-//                        )
-//                );
-//
-//        task.setStatus(status);
-//        task.setUpdatedAt(LocalDateTime.now());
-//
-//        Task updatedTask = taskRepository.save(task);
-//
-//        return convertToResponse(updatedTask);
-//    }
-
-    private Task getTaskForCurrentUser(Long taskId) {
-
-        Task task = taskRepository.findById(taskId)
-                .orElseThrow(() ->
-                        new TaskNotFoundException(
-                                "Task not found with id: " + taskId
-                        ));
-
-        User currentUser = currentUserService.getCurrentUser();
-
-        if (!task.getUser().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException(
-                    "You cannot access another user's task"
-            );
-        }
-
-        return task;
-    }
-
-
-    public TaskResponse getTaskById(Long id) {
-
-        Task task = getTaskForCurrentUser(id);
-
-        return convertToResponse(task);
-    }
-
-    public TaskResponse updateTask(
-            Long id,
-            TaskRequest request) {
-
-        Task task = getTaskForCurrentUser(id);
-
-        task.setTitle(request.getTitle());
-        task.setDescription(request.getDescription());
-        task.setPriority(request.getPriority());
-        task.setDueDate(request.getDueDate());
-        task.setUpdatedAt(LocalDateTime.now());
-
-        return convertToResponse(
-                taskRepository.save(task)
-        );
-    }
-
-    public void deleteTask(Long id) {
-
-        Task task = getTaskForCurrentUser(id);
-
-        taskRepository.delete(task);
-    }
-
-    public TaskResponse updateTaskStatus(
-            Long id,
-            TaskStatus status) {
-
-        Task task = getTaskForCurrentUser(id);
-
-        task.setStatus(status);
-        task.setUpdatedAt(LocalDateTime.now());
-
-        return convertToResponse(
-                taskRepository.save(task)
-        );
     }
 }

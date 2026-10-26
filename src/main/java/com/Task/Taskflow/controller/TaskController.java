@@ -21,25 +21,45 @@ public class TaskController {
         this.taskService = taskService;
     }
 
-    // Create task for a user
+
+    // =========================================================
+    // CREATE
+    // POST /api/tasks/user/{userId}
+    // =========================================================
+
     @PostMapping("/user/{userId}")
     public ResponseEntity<TaskResponse> createTask(
             @PathVariable Long userId,
             @Valid @RequestBody TaskRequest request) {
 
-        TaskResponse response = taskService.createTask(userId, request);
+        TaskResponse response =
+                taskService.createTask(userId, request);
 
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
     }
 
-    // Get all tasks
+
+    // =========================================================
+    // GET ALL
+    // GET /api/tasks
+    // =========================================================
+
     @GetMapping
     public ResponseEntity<List<TaskResponse>> getAllTasks() {
 
-        return ResponseEntity.ok(taskService.getAllTasks());
+        return ResponseEntity.ok(
+                taskService.getAllTasks()
+        );
     }
 
-    // Get tasks belonging to a particular user
+
+    // =========================================================
+    // GET USER TASKS
+    // GET /api/tasks/user/{userId}
+    // =========================================================
+
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<TaskResponse>> getTasksByUser(
             @PathVariable Long userId) {
@@ -49,7 +69,12 @@ public class TaskController {
         );
     }
 
-    // Get task by ID
+
+    // =========================================================
+    // GET ONE
+    // GET /api/tasks/{id}
+    // =========================================================
+
     @GetMapping("/{id}")
     public ResponseEntity<TaskResponse> getTaskById(
             @PathVariable Long id) {
@@ -59,7 +84,12 @@ public class TaskController {
         );
     }
 
-    // Update task
+
+    // =========================================================
+    // UPDATE
+    // PUT /api/tasks/{id}
+    // =========================================================
+
     @PutMapping("/{id}")
     public ResponseEntity<TaskResponse> updateTask(
             @PathVariable Long id,
@@ -70,7 +100,12 @@ public class TaskController {
         );
     }
 
-    // Delete task
+
+    // =========================================================
+    // DELETE
+    // DELETE /api/tasks/{id}
+    // =========================================================
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(
             @PathVariable Long id) {
@@ -79,6 +114,12 @@ public class TaskController {
 
         return ResponseEntity.noContent().build();
     }
+
+
+    // =========================================================
+    // UPDATE STATUS
+    // PATCH /api/tasks/{id}/status
+    // =========================================================
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<TaskResponse> updateTaskStatus(
@@ -92,5 +133,4 @@ public class TaskController {
                 )
         );
     }
-
 }
